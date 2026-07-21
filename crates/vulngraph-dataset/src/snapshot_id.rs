@@ -27,7 +27,7 @@ pub fn snapshot_id(db_dir: &Path) -> std::io::Result<String> {
         hasher.update(name.as_bytes());
         hasher.update([0u8]);
         hasher.update(hash.as_bytes());
-        hasher.update([b'\n']);
+        hasher.update(b"\n");
     }
     Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
