@@ -39,7 +39,7 @@ Prebuilt binaries: `x86_64-unknown-linux-musl`, `aarch64-apple-darwin`. Or
 
 | Command | What it does |
 |---|---|
-| `vulngraph check <target>…` | Verdict + evidence for each target. `<target>` is `CVE-YYYY-NNNN` or `ecosystem:name@version` (e.g. `npm:lodash@4.17.20`). |
+| `vulngraph check <target>…` | Verdict + evidence for each target. `<target>` is `CVE-YYYY-NNNN`, `ecosystem:name@version` (e.g. `npm:lodash@4.17.20`), **or a path to a lockfile** whose dependencies are each checked. |
 | `vulngraph status` | Installed snapshot, integrity, freshness. |
 | `vulngraph update` | Download, verify, compile, and atomically activate a data release. `--offline-dir DIR` installs from local assets. |
 | `vulngraph capabilities` | Commands, output schemas, guarantees, exit codes. |
@@ -47,6 +47,32 @@ Prebuilt binaries: `x86_64-unknown-linux-musl`, `aarch64-apple-darwin`. Or
 
 Global: `--json` (stable machine envelope), `--offline` (assert no network).
 `vulngraph CVE-2024-4577` is shorthand for `vulngraph check …`.
+
+### Scanning a lockfile
+
+Point `check` at a dependency file and every package in it gets the same
+verdict — no new command, just a file argument:
+
+```console
+$ vulngraph check package-lock.json
+  Scanned 214 package(s)
+       1  ACTIVELY EXPLOITED
+       4  PROOF OF CONCEPT
+      12  RECORDED
+     190  NOT AFFECTED
+       7  UNKNOWN
+
+  Affected:
+    ACTIVELY EXPLOITED  npm:lodash@4.17.15  (6 CVEs)
+    PROOF OF CONCEPT    npm:minimist@1.2.0  (2 CVEs)
+    …
+```
+
+Detected by filename: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`,
+`Cargo.lock`, `Gemfile.lock`, `poetry.lock`, `requirements.txt`, `go.sum`,
+`composer.lock`, `pom.xml`, `gradle.lockfile`, `Pipfile.lock`. `--json`
+emits the full per-package result array. You can mix files and individual
+targets in one invocation.
 
 ## Verdicts
 

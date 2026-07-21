@@ -49,6 +49,25 @@ print("  ok  unknown package -> unknown (exit 0)")
 expect_exit 2 "bad target -> invalid invocation" -- "$BIN" check not-a-target
 expect_exit 0 "package check"                    -- "$BIN" check npm:lodash@4.17.15
 
+echo "== lockfile scan =="
+lock="$HOME_DIR/package-lock.json"
+cat > "$lock" <<'JSON'
+{"name":"demo","lockfileVersion":3,"packages":{
+  "":{"name":"demo"},
+  "node_modules/lodash":{"version":"4.17.15"},
+  "node_modules/express":{"version":"4.18.2"}}}
+JSON
+"$BIN" check "$lock" --json | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+assert d["ok"] is True and d["command"]=="check"
+vals={r["target"]["value"] for r in d["data"]}
+assert "npm:lodash@4.17.15" in vals, vals
+print("  ok  lockfile expands to package targets")
+'
+: > "$HOME_DIR/notalock.xyz"
+expect_exit 2 "unknown lockfile -> invalid invocation" -- "$BIN" check "$HOME_DIR/notalock.xyz"
+
 echo "== schemas =="
 for s in command observation status; do
   "$BIN" schema "$s" | python3 -c 'import json,sys; json.load(sys.stdin)' \

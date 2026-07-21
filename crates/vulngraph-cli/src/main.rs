@@ -13,8 +13,12 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use std::collections::BTreeMap;
+
 use clap::{Parser, Subcommand, ValueEnum};
+use vulngraph_core::lockfile::{self, LockFormat};
 use vulngraph_core::status::{Capabilities, DatasetStatus, SnapshotSummary};
+use vulngraph_core::target::Target;
 use vulngraph_core::verdict::{CheckResult, Disposition};
 use vulngraph_core::{CommandEnvelope, Diagnostic, STATUS_SCHEMA, codes};
 use vulngraph_dataset::{
@@ -58,7 +62,12 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Check one or more targets (CVE-YYYY-NNNN or ecosystem:name@version).
+    /// Check targets, or a lockfile of them.
+    ///
+    /// Each argument is a CVE (CVE-YYYY-NNNN), a package
+    /// (ecosystem:name@version), or a path to a lockfile / manifest
+    /// (package-lock.json, Cargo.lock, requirements.txt, go.sum, pom.xml, …)
+    /// whose dependencies are each checked.
     Check {
         #[arg(required = true)]
         targets: Vec<String>,
@@ -157,16 +166,28 @@ fn home_dir() -> PathBuf {
 fn check(targets: &[String], json: bool) -> u8 {
     let start = Instant::now();
 
-    // Parse every target first; a single bad target fails the invocation.
-    let mut parsed = Vec::with_capacity(targets.len());
+    // Each argument is a single target or a lockfile that expands to many.
+    // A single bad argument fails the whole invocation.
+    let mut parsed: Vec<Target> = Vec::with_capacity(targets.len());
+    let mut scanned_files = 0usize;
+    let mut seen = std::collections::HashSet::new();
     for raw in targets {
-        match raw.parse::<vulngraph_core::target::Target>() {
-            Ok(target) => parsed.push(target),
-            Err(e) => {
+        match expand_argument(raw) {
+            Ok(expanded) => {
+                if expanded.from_file {
+                    scanned_files += 1;
+                }
+                for target in expanded.targets {
+                    if seen.insert(target.value().to_string()) {
+                        parsed.push(target);
+                    }
+                }
+            }
+            Err(diagnostic) => {
                 return emit_failure(
                     "check",
                     json,
-                    Diagnostic::new(codes::INVALID_TARGET, e.to_string()),
+                    diagnostic,
                     EXIT_INVALID_INVOCATION,
                     elapsed(start),
                 );
@@ -192,6 +213,11 @@ fn check(targets: &[String], json: bool) -> u8 {
 
     if json {
         print_json(&envelope);
+    } else if scanned_files > 0 {
+        render_scan(
+            envelope.data.as_deref().unwrap_or(&[]),
+            &snapshot.manifest.snapshot_id,
+        );
     } else {
         render_check(
             envelope.data.as_deref().unwrap_or(&[]),
@@ -199,6 +225,48 @@ fn check(targets: &[String], json: bool) -> u8 {
         );
     }
     EXIT_OK
+}
+
+struct Expanded {
+    targets: Vec<Target>,
+    from_file: bool,
+}
+
+/// Turn one CLI argument into targets: a lockfile path expands to its
+/// dependencies; anything else parses as a single CVE/package target.
+fn expand_argument(raw: &str) -> Result<Expanded, Diagnostic> {
+    let path = std::path::Path::new(raw);
+    if path.is_file() {
+        let format = LockFormat::detect(path).ok_or_else(|| {
+            Diagnostic::new(
+                codes::INVALID_TARGET,
+                lockfile::LockfileError::UnknownFormat(
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(raw)
+                        .to_string(),
+                )
+                .to_string(),
+            )
+        })?;
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            Diagnostic::new(codes::INVALID_TARGET, format!("cannot read {raw}: {e}"))
+        })?;
+        let targets = lockfile::parse(format, &content)
+            .map_err(|e| Diagnostic::new(codes::INVALID_TARGET, e.to_string()))?;
+        Ok(Expanded {
+            targets,
+            from_file: true,
+        })
+    } else {
+        let target = raw
+            .parse::<Target>()
+            .map_err(|e| Diagnostic::new(codes::INVALID_TARGET, e.to_string()))?;
+        Ok(Expanded {
+            targets: vec![target],
+            from_file: false,
+        })
+    }
 }
 
 /// Open the active snapshot, mapping the distinct failure states to their
@@ -493,6 +561,63 @@ fn render_check(results: &[CheckResult], snapshot_id: &str) {
                     }
                 );
             }
+        }
+    }
+    println!();
+    println!("  snapshot: {snapshot_id}");
+    println!();
+}
+
+/// Render a lockfile scan: a disposition histogram plus detail only for the
+/// packages that are actually affected (noise from hundreds of clean deps
+/// would bury the signal).
+fn render_scan(results: &[CheckResult], snapshot_id: &str) {
+    let mut counts: BTreeMap<Disposition, usize> = BTreeMap::new();
+    let mut affected: Vec<&CheckResult> = Vec::new();
+    for result in results {
+        *counts.entry(result.verdict.disposition).or_insert(0) += 1;
+        // "Affected" = a version range matched (recorded and above), i.e.
+        // everything except not-affected and unknown.
+        if result.verdict.disposition > Disposition::NotAffected {
+            affected.push(result);
+        }
+    }
+    affected.sort_by_key(|r| std::cmp::Reverse(r.verdict.disposition));
+
+    println!();
+    println!("  Scanned {} package(s)", results.len());
+    // Highest severity first.
+    for disposition in [
+        Disposition::ActivelyExploited,
+        Disposition::Weaponized,
+        Disposition::ProofOfConcept,
+        Disposition::Scored,
+        Disposition::Recorded,
+        Disposition::NotAffected,
+        Disposition::Unknown,
+    ] {
+        if let Some(n) = counts.get(&disposition) {
+            println!("    {:>4}  {}", n, disposition_label(disposition));
+        }
+    }
+
+    if !affected.is_empty() {
+        println!();
+        println!("  Affected:");
+        for result in affected {
+            let count = result
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("cves_affecting_version"))
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            println!(
+                "    {}  {}  ({} CVE{})",
+                disposition_label(result.verdict.disposition),
+                result.target.value(),
+                count,
+                if count == 1 { "" } else { "s" }
+            );
         }
     }
     println!();

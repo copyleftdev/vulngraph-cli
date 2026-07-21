@@ -20,9 +20,11 @@ Three crates, linear dependency stack:
 ## The Five-Command Discipline (Non-Negotiable)
 
 The command surface is exactly: `check`, `status`, `update`, `capabilities`,
-`schema`. Do not add commands (no `scan`, no config file, no server mode).
-Focus is the product. New evidence sources extend `check` output; they do not
-add verbs.
+`schema`. Do not add commands (no separate `scan` verb, no config file, no
+server mode). Focus is the product. New evidence sources extend `check`
+output; new input shapes extend `check` arguments — they do not add verbs.
+Lockfile scanning is deliberately folded into `check`: a file-path argument
+expands to its dependencies (`core::lockfile`), keeping the surface at five.
 
 ## Three External SYNC Points
 
@@ -41,6 +43,10 @@ on-disk-format change gates a `format_version` bump in the release manifest
 3. **Snapshot identity** — `src/snapshot_id.rs` mirrors vulngraph-data's
    `crates/vulngraph-data/src/manifest.rs` (`SEMANTIC_FILES` + hash walk). The
    file list is shared via `vulngraph_core::manifest::SEMANTIC_FILES`.
+4. **Lockfile parsers** — `crates/vulngraph-core/src/lockfile.rs` mirrors the
+   `parse_*` functions in the private repo's `mcp/src/tools/batch.rs`. These
+   are behavioral (best-effort) parsers, not a binary contract, so they do not
+   gate `format_version` — but keep them in sync so CLI and MCP agree.
 
 ## Unsafe Policy
 
