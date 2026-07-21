@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vulngraph.observation.v1",
+  "title": "VulnGraph check result",
+  "description": "One target's verdict, derived from typed observations. 'unknown' is never rendered as clean.",
+  "type": "object",
+  "required": ["schema", "target", "verdict", "observations"],
+  "properties": {
+    "schema": { "const": "vulngraph.observation.v1" },
+    "target": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "enum": ["cve", "package"] },
+        "value": { "type": "string" },
+        "ecosystem": { "type": "string" },
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "verdict": { "$ref": "#/$defs/verdict" },
+    "observations": { "type": "array", "items": { "$ref": "#/$defs/observation" } },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cve_id", "verdict", "observations", "no_fix_available"],
+        "properties": {
+          "cve_id": { "type": "string" },
+          "verdict": { "$ref": "#/$defs/verdict" },
+          "observations": { "type": "array", "items": { "$ref": "#/$defs/observation" } },
+          "no_fix_available": { "type": "boolean" }
+        }
+      }
+    },
+    "metadata": { "type": ["object", "null"] }
+  },
+  "$defs": {
+    "verdict": {
+      "type": "object",
+      "required": ["disposition", "confidence", "action", "reason_codes"],
+      "properties": {
+        "disposition": {
+          "enum": [
+            "unknown", "not-affected", "recorded", "scored",
+            "proof-of-concept", "weaponized", "actively-exploited"
+          ]
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 0.99 },
+        "action": {
+          "enum": ["patch-now", "prioritize", "monitor", "investigate", "no-action-required"]
+        },
+        "reason_codes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "required": ["classification", "source_id", "independence_group", "assertion", "confidence"],
+      "properties": {
+        "classification": { "type": "string" },
+        "source_id": { "type": "string" },
+        "independence_group": { "type": "string" },
+        "assertion": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vulngraph.status.v1",
+  "title": "VulnGraph dataset status",
+  "type": "object",
+  "required": ["schema", "installed", "home", "integrity", "freshness"],
+  "properties": {
+    "schema": { "const": "vulngraph.status.v1" },
+    "installed": { "type": "boolean" },
+    "home": { "type": "string" },
+    "integrity": { "enum": ["verified", "invalid", "unavailable"] },
+    "freshness": { "enum": ["fresh", "stale", "unavailable"] },
+    "snapshot": {
+      "type": "object",
+      "required": ["id", "created_at", "node_count", "edge_count", "engine_rev", "format_version"],
+      "properties": {
+        "id": { "type": "string" },
+        "created_at": { "type": "string" },
+        "node_count": { "type": "integer" },
+        "edge_count": { "type": "integer" },
+        "engine_rev": { "type": "string" },
+        "format_version": { "type": "integer" }
+      }
+    }
+  }
+}

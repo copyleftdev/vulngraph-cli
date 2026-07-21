@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vulngraph.command.v1",
+  "title": "VulnGraph command envelope",
+  "description": "Stable machine-output wrapper emitted by every command with --json.",
+  "type": "object",
+  "required": ["schema", "command", "ok", "partial", "warnings", "errors", "metrics"],
+  "properties": {
+    "schema": { "const": "vulngraph.command.v1" },
+    "command": { "type": "string" },
+    "ok": { "type": "boolean" },
+    "partial": { "type": "boolean" },
+    "snapshot_id": { "type": "string" },
+    "data": {},
+    "warnings": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+    "errors": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+    "metrics": {
+      "type": "object",
+      "required": ["elapsed_us"],
+      "properties": { "elapsed_us": { "type": "integer", "minimum": 0 } }
+    }
+  },
+  "$defs": {
+    "diagnostic": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}
