@@ -1,0 +1,33 @@
+[package]
+name = "vulngraph-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vulngraph-core = { path = "../crates/vulngraph-core" }
+vulngraph-dataset = { path = "../crates/vulngraph-dataset" }
+
+[[bin]]
+name = "target_parse"
+path = "fuzz_targets/target_parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "manifest_parse"
+path = "fuzz_targets/manifest_parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "vrb_open"
+path = "fuzz_targets/vrb_open.rs"
+test = false
+doc = false
+
+[workspace]
