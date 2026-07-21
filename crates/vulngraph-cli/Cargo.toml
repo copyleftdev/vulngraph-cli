@@ -1,0 +1,8 @@
+[package]
+name = "vulngraph-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "vulngraph"
+path = "src/main.rs"
